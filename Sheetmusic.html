@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>공유 악보 | 관리자/뷰어</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  html, body { margin:0; padding:0; background:#f6f7fb; font-family: system-ui, -apple-system, "Noto Sans KR", Segoe UI, Roboto, Arial, sans-serif; }
+  .wrap { max-width: 980px; margin: 22px auto; background:#fff; border:1px solid #e9ebf0; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,0.06); overflow:hidden; }
+  header { padding:14px 18px; border-bottom:1px solid #eef0f4; display:flex; align-items:center; gap:12px; }
+  header h1 { margin:0; font-size:18px; }
+  .spacer { flex:1; }
+  .badge { display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; background:#f2f3f7; color:#333; font-size:12px; }
+  .viewer-badge { background:#eef7ff; color:#0b62c4; }
+  .admin-badge { background:#fff9e6; color:#8a5d00; }
+  .btn { border:0; border-radius:10px; padding:10px 14px; background:#111; color:#fff; cursor:pointer; font-weight:700; }
+  .btn.ghost { background:#fff; color:#111; border:1px solid #dcdfe5; }
+  .btn.red { background:#d6232f; }
+  .btn.small { padding:8px 10px; font-weight:600; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  .content { padding: 18px; }
+  .topbar { position: sticky; top:0; z-index:50; background:#fff; border-bottom:1px solid #eef0f4; padding:10px 12px; display:none; }
+  .topbar-inner { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .input, input[list] { border:1px solid #dcdfe5; border-radius:10px; padding:10px 12px; min-width:190px; outline:none; }
+  .input.wide { flex:1; min-width:260px; }
+  .hint { color:#667086; font-size:14px; margin:10px 2px 14px; }
+  ul#list { list-style:none; margin:0; padding:0; }
+  ul#list li { display:flex; align-items:center; gap:12px; border:1px solid #eef0f4; margin-bottom:10px; padding:14px; border-radius:12px; background:#fff; }
+  .num { min-width:84px; text-align:center; font-weight:800; font-size:18px; border-right:1px dashed #eef0f4; padding-right:10px; }
+  .meta { flex:1; display:flex; flex-direction:column; gap:6px; }
+  .meta .title { font-size:16px; }
+  .meta .time { font-size:12px; color:#7a8597; }
+  .actions a, .actions button { text-decoration:none; border:1px solid #e3e6ee; border-radius:8px; padding:8px 10px; font-size:13px; color:#111; background:#fff; }
+  .empty { color:#95a0b4; padding:16px; text-align:center; }
+
+  /* 추가 반짝 */
+  .blink { animation: blinkA .6s linear infinite; border-color:#ff4d4f !important; box-shadow:0 0 0 2px rgba(255,77,79,.15); }
+  @keyframes blinkA { 0%,100%{ background:#fff4f4; } 50%{ background:#ffeaea; } }
+
+  .footer { padding:14px 18px 20px; border-top:1px solid #eef0f4; display:flex; align-items:center; gap:12px; justify-content:space-between; flex-wrap:wrap; }
+  .note { font-size:12px; color:#7a8597; }
+
+  /* 모달 */
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; align-items:center; justify-content:center; z-index:100; }
+  .modal { width:min(92vw, 520px); background:#fff; border-radius:14px; padding:18px; box-shadow:0 12px 30px rgba(0,0,0,.25); }
+  .modal h3 { margin:0 0 10px 0; font-size:18px; }
+  .modal .row { display:flex; gap:10px; margin:8px 0; }
+  .modal .row .input { flex:1; }
+  .qr-box { display:flex; align-items:center; justify-content:center; padding:14px; background:#f9fafc; border:1px dashed #e3e6ee; border-radius:12px; }
+
+  /* 모바일에서 링크 상자 */
+  .copy-wrap { display:flex; gap:8px; margin-top:10px; }
+  .copy-wrap input { flex:1; }
+
+  /* 강조 표시 */
+  .hl { background:yellow; color:#c00; font-weight:700; padding:0 .2em; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>공유 악보</h1>
+    <span id="modeBadge" class="badge viewer-badge" style="display:none;">보기 전용</span>
+    <span id="adminBadge" class="badge admin-badge" style="display:none;">관리자 모드</span>
+    <div class="spacer"></div>
+    <button id="openLoginBtn" class="btn small" style="display:none;">관리자 로그인</button>
+  </header>
+
+  <!-- 상단 고정 바: 시작하기 누르면 나타남 -->
+  <div class="topbar" id="topbar">
+    <div class="topbar-inner">
+      <button id="openShareBtn" class="btn ghost small">QR / 공유링크</button>
+      <input id="searchInput" class="input wide" list="hints" placeholder="숫자 또는 제목으로 검색" />
+      <datalist id="hints"></datalist>
+      <div id="addBox" style="display:none; align-items:center; gap:8px;">
+        <input id="addInput" class="input" list="hints" placeholder="숫자 또는 제목 입력" />
+        <button id="addBtn" class="btn small">추가</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="hint">• 파일은 구글 드라이브 지정 폴더에 <b>숫자.확장자</b> 형식으로 보관하세요 (예: <code>12.pdf</code>, <code>34.jpg</code>)<br/>• B열(곡명)은 시트에서 직접 적거나, 동일 번호의 기존 제목을 자동 재사용합니다.</div>
+    <ul id="list"><li class="empty">불러오는 중…</li></ul>
+  </div>
+
+  <div class="footer">
+    <div class="note">추가 시 마지막 항목이 5초간 빨간색으로 반짝 표시됩니다. 중복 숫자도 아래에 계속 추가됩니다.</div>
+    <button id="startBtn" class="btn">시작하기</button>
+  </div>
+</div>
+
+<!-- 공유/QR 모달 -->
+<div id="shareModal" class="modal-bg">
+  <div class="modal">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <h3>공유 & QR</h3>
+      <button id="closeShare" class="btn ghost small">닫기</button>
+    </div>
+    <div class="qr-box"><img id="qrImg" alt="QR" /></div>
+    <div class="copy-wrap">
+      <input id="shareLink" class="input" readonly />
+      <button id="copyLinkBtn" class="btn small">링크 복사</button>
+    </div>
+  </div>
+</div>
+
+<!-- 로그인 모달 -->
+<div id="loginModal" class="modal-bg">
+  <div class="modal">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+      <h3>관리자 로그인(임시키 발급)</h3>
+      <button id="closeLogin" class="btn ghost small">닫기</button>
+    </div>
+    <div class="row">
+      <input id="adminName" class="input" placeholder="이름(예: 홍길동)" />
+      <input id="adminPhone" class="input" placeholder="휴대폰(예: 01012345678)" />
+    </div>
+    <div class="hint">로그인하면 <b>오늘~내일 02:00(현지시간)</b>까지 유효한 임시키가 발급됩니다.</div>
+    <div class="row" style="justify-content:flex-end;">
+      <button id="loginBtn" class="btn">오늘 하루 관리자 시작</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/** ====== 환경설정: Apps Script 웹앱 URL ====== */
+const API_BASE = 'https://script.google.com/macros/s/여기에_웹앱_URL_ID/exec';
+/** ============================================ */
+
+const els = {
+  list: document.getElementById('list'),
+  hints: document.getElementById('hints'),
+  search: document.getElementById('searchInput'),
+  addBox: document.getElementById('addBox'),
+  addInput: document.getElementById('addInput'),
+  addBtn: document.getElementById('addBtn'),
+  topbar: document.getElementById('topbar'),
+  startBtn: document.getElementById('startBtn'),
+  openShareBtn: document.getElementById('openShareBtn'),
+  shareModal: document.getElementById('shareModal'),
+  closeShare: document.getElementById('closeShare'),
+  qrImg: document.getElementById('qrImg'),
+  shareLink: document.getElementById('shareLink'),
+  copyLinkBtn: document.getElementById('copyLinkBtn'),
+  modeBadge: document.getElementById('modeBadge'),
+  adminBadge: document.getElementById('adminBadge'),
+  openLoginBtn: document.getElementById('openLoginBtn'),
+  loginModal: document.getElementById('loginModal'),
+  closeLogin: document.getElementById('closeLogin'),
+  adminName: document.getElementById('adminName'),
+  adminPhone: document.getElementById('adminPhone'),
+  loginBtn: document.getElementById('loginBtn'),
+};
+
+let STATE = {
+  items: [],
+  hints: [],
+  modeViewer: new URLSearchParams(location.search).get('mode') === 'viewer',
+  admin: null, // {token, expiresAtMs, name}
+};
+
+/* 뷰 모드/배지 */
+function refreshBadges(){
+  els.modeBadge.style.display = STATE.modeViewer ? 'inline-flex' : 'none';
+  const validAdmin = getAdminTokenValid();
+  els.adminBadge.style.display = (!STATE.modeViewer && validAdmin) ? 'inline-flex' : 'none';
+  els.openLoginBtn.style.display = (!STATE.modeViewer && !validAdmin) ? 'inline-flex' : 'none';
+  els.addBox.style.display = (!STATE.modeViewer && validAdmin) ? 'inline-flex' : 'none';
+}
+
+/* 리스트 렌더 */
+function makeItem(it, q){
+  const li = document.createElement('li');
+  const num = document.createElement('div');
+  num.className='num'; num.textContent = it.number;
+
+  const meta = document.createElement('div');
+  meta.className='meta';
+  const title = document.createElement('div');
+  title.className='title';
+  title.innerHTML = highlight(it.title || '(제목 없음)', q);
+  const time = document.createElement('div');
+  time.className='time';
+  time.textContent = (it.timestamp ? `추가: ${it.timestamp}` : '') + (it.adderName? ` • by ${it.adderName}`:'');
+  meta.appendChild(title); meta.appendChild(time);
+
+  const actions = document.createElement('div'); actions.className='actions';
+  if (it.viewUrl){
+    const openA = document.createElement('a');
+    openA.href = it.viewUrl; openA.target='_blank'; openA.rel='noopener';
+    openA.textContent='열기(미리보기)'; // 다운로드 링크는 제공하지 않음
+    actions.appendChild(openA);
+  }
+
+  li.appendChild(num); li.appendChild(meta); li.appendChild(actions);
+  return li;
+}
+function render(items, query=''){
+  els.list.innerHTML='';
+  if (!items.length){ els.list.innerHTML = '<li class="empty">항목이 없습니다.</li>'; return; }
+  const q = (query||'').trim().toLowerCase();
+  const filtered = q ? items.filter(it => it.number.includes(q) || (it.title||'').toLowerCase().includes(q)) : items;
+  filtered.forEach(it => els.list.appendChild(makeItem(it, q)));
+}
+
+/* 강조 표시 */
+function highlight(text, q){
+  if (!q) return escapeHtml(text);
+  const re = new RegExp('('+escapeReg(q)+')','ig');
+  return escapeHtml(text).replace(re, '<span class="hl">$1</span>');
+}
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+function escapeReg(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+/* 데이터 불러오기 */
+async function loadList(){
+  const res = await fetch(API_BASE+'?action=list');
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error||'load_failed');
+  STATE.items = data.items||[];
+  STATE.hints = data.hints||[];
+  // datalist 채우기
+  els.hints.innerHTML='';
+  const seen = new Set();
+  STATE.hints.forEach(h => {
+    if (seen.has(h)) return; seen.add(h);
+    const opt = document.createElement('option');
+    opt.value = h; els.hints.appendChild(opt);
+  });
+  render(STATE.items);
+}
+
+/* 검색 */
+els.search.addEventListener('input', e => render(STATE.items, e.target.value));
+
+/* 시작하기: 상단 바 열고 스크롤 */
+els.startBtn.addEventListener('click', () => {
+  els.topbar.style.display='block';
+  els.topbar.scrollIntoView({ behavior:'smooth', block:'start' });
+  setTimeout(()=> els.search.focus(), 200);
+});
+
+/* QR/공유 모달 */
+els.openShareBtn.addEventListener('click', async () => {
+  // API에서 viewer 링크 조회
+  const res = await fetch(API_BASE+'?action=viewer_link');
+  const data = await res.json();
+  const link = (data.ok && data.viewerUrl) ? data.viewerUrl : (location.origin+location.pathname+'?mode=viewer');
+  els.shareLink.value = link;
+  // Google Chart API QR 이미지 사용
+  const qr = 'https://chart.googleapis.com/chart?cht=qr&chs=300x300&chld=L|0&chl=' + encodeURIComponent(link);
+  els.qrImg.src = qr;
+  els.shareModal.style.display='flex';
+});
+els.closeShare.addEventListener('click', ()=> els.shareModal.style.display='none');
+els.shareModal.addEventListener('click', (e)=> { if (e.target===els.shareModal) els.shareModal.style.display='none'; });
+els.copyLinkBtn.addEventListener('click', async ()=>{
+  try {
+    await navigator.clipboard.writeText(els.shareLink.value);
+    els.copyLinkBtn.textContent='복사됨!';
+    setTimeout(()=> els.copyLinkBtn.textContent='링크 복사', 1000);
+  } catch(e){ alert('복사 실패: '+e); }
+});
+
+/* 관리자 로그인 모달 */
+function openLogin(){ els.loginModal.style.display='flex'; }
+function closeLogin(){ els.loginModal.style.display='none'; }
+els.openLoginBtn.addEventListener('click', openLogin);
+els.closeLogin.addEventListener('click', closeLogin);
+els.loginModal.addEventListener('click', (e)=> { if (e.target===els.loginModal) closeLogin(); });
+
+/* 로컬 저장된 관리자 토큰 */
+function getAdminTokenObj(){
+  try {
+    const raw = localStorage.getItem('ADMIN_TOKEN_OBJ');
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+function setAdminTokenObj(o){
+  localStorage.setItem('ADMIN_TOKEN_OBJ', JSON.stringify(o||{}));
+}
+function clearAdminToken(){
+  localStorage.removeItem('ADMIN_TOKEN_OBJ');
+}
+function getAdminTokenValid(){
+  const o = getAdminTokenObj();
+  if (!o || !o.token || !o.expiresAtMs) return false;
+  return Date.now() < Number(o.expiresAtMs);
+}
+
+/* 로그인 실행 (임시키 발급) */
+els.loginBtn.addEventListener('click', async ()=>{
+  const name = els.adminName.value.trim();
+  const phone = els.adminPhone.value.trim();
+  if (!name || !phone) { alert('이름과 휴대폰을 입력하세요.'); return; }
+  const clientNowISO = new Date().toISOString(); // 브라우저 시각
+  const tzOffsetMin = - (new Date().getTimezoneOffset()); // 예: +540(=KST)
+  els.loginBtn.disabled = true; els.loginBtn.textContent='발급 중…';
+  try {
+    const res = await fetch(API_BASE, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'loginAdmin', name, phone, clientNowISO, tzOffsetMin })
+    });
+    const data = await res.json();
+    if (!data.ok) { alert('로그인 실패: '+(data.error||'unknown')); return; }
+    setAdminTokenObj({ token:data.token, expiresAtMs:data.expiresAtMs, name:data.admin?.name||name });
+    closeLogin(); refreshBadges();
+    // 상단 바가 열려 있다면 "추가 박스" 표시 갱신
+    if (els.topbar.style.display!=='none') els.addBox.style.display='inline-flex';
+    alert('관리자 임시키 발급 완료!\n만료: ' + new Date(Number(data.expiresAtMs)).toLocaleString());
+  } catch(e){ alert('오류: '+e); }
+  finally { els.loginBtn.disabled=false; els.loginBtn.textContent='오늘 하루 관리자 시작'; }
+});
+
+/* 추가 로직: 숫자 또는 제목 입력 허용 */
+function findNumberByTitle(title){
+  const candidates = STATE.items.filter(it => (it.title||'').trim() === title.trim());
+  const uniqueNums = Array.from(new Set(candidates.map(it=>it.number)));
+  return uniqueNums;
+}
+async function doAdd(){
+  const txt = (els.addInput.value||'').trim();
+  if (!txt){ alert('숫자 또는 제목을 입력하세요.'); return; }
+
+  let number='', title='';
+  if (/^\d+$/.test(txt)){
+    number = txt;
+    // title은 비워두면 서버가 기존 동일번호의 최근 제목을 자동 재사용
+  } else {
+    // 제목으로 입력된 경우 → 일치 제목에서 숫자 찾기
+    const nums = findNumberByTitle(txt);
+    if (nums.length===0){ alert('같은 제목을 찾지 못했습니다. 먼저 해당 번호를 한 번 추가하거나, 시트 B열에 제목을 기록하세요.'); return; }
+    if (nums.length>1){ alert('같은 제목에 해당하는 번호가 여러 개입니다. 숫자로 지정해 주세요: '+nums.join(', ')); return; }
+    number = nums[0]; title = txt; // 제목 전달(서버는 있으면 그대로 기록)
+  }
+
+  // 토큰 확인
+  const admin = getAdminTokenObj();
+  if (!admin || !admin.token || Date.now() > Number(admin.expiresAtMs)){
+    alert('관리자 임시키가 없거나 만료되었습니다. 다시 로그인하세요.');
+    return;
+  }
+
+  els.addBtn.disabled=true; els.addBtn.textContent='추가 중…';
+  try{
+    const res = await fetch(API_BASE, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'add', token:admin.token, number, title })
+    });
+    const data = await res.json();
+    if (!data.ok){
+      if (data.error==='expired_or_invalid_token') alert('임시키 만료 또는 무효. 다시 로그인하세요.');
+      else if (data.error==='file_not_found_in_folder') alert('해당 숫자 파일을 폴더에서 찾지 못했습니다.');
+      else alert('추가 실패: '+(data.error||'unknown'));
+      return;
+    }
+    await loadList();
+    const last = els.list.lastElementChild;
+    if (last){ last.classList.add('blink'); setTimeout(()=> last.classList.remove('blink'), 5000); last.scrollIntoView({behavior:'smooth', block:'end'}); }
+    els.addInput.value='';
+  } catch(e){ alert('추가 중 오류: '+e); }
+  finally{ els.addBtn.disabled=false; els.addBtn.textContent='추가'; }
+}
+els.addBtn.addEventListener('click', doAdd);
+els.addInput.addEventListener('keydown', (e)=> { if (e.key==='Enter') doAdd(); });
+
+/* 초기화 */
+(async function init(){
+  // 모드/배지
+  refreshBadges();
+
+  // 보기 전용이면 로그인 버튼 숨김
+  if (!STATE.modeViewer) {
+    // 관리자 유효 시 즉시 표기
+    if (getAdminTokenValid()) els.addBox.style.display='inline-flex';
+    else els.openLoginBtn.style.display='inline-flex';
+  }
+
+  // 데이터 로드
+  try { await loadList(); } catch(e){ els.list.innerHTML='<li class="empty">불러오기 실패: '+escapeHtml(String(e))+'</li>'; }
+
+  // 시작하기 버튼 눌러 상단바 열어두고 싶다면 자동 클릭 가능 (옵션)
+})();
+</script>
+</body>
+</html>
