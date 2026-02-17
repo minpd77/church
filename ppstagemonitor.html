@@ -1,375 +1,312 @@
 <!doctype html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <link rel="stylesheet" href="css/core.css" />
-    <link rel="stylesheet" href="css/user.css" />
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="css/core.css" />
+  <link rel="stylesheet" href="css/user.css" />
+  <script type="text/javascript" src="config.js"></script>
+  <script type="text/javascript" src="js/core.js"></script>
 
-    <style>
-      :root{
-        /* 글자 크기(기본값). JS에서 localStorage로 덮어씀 */
-        --clockSize: 4.0rem;
-        --currentSize: 10.0rem;
-        --nextSize: 10.0rem;
+  <style>
+    :root{
+      --clockSize: 4.0rem;
+      --currentSize: 10.0rem;
+      --nextSize: 10.0rem;
+
+      /* ✅ 다음가사 컬러(사용자가 준 이미지 컬러) */
+      --nextColor: #BE9531;
+    }
+
+    body{
+      background:#000;
+      color:#fff;
+      font-family:sans-serif;
+      font-weight:bold;
+      padding:2rem;
+    }
+
+    .container{ flex-direction:column; height:100vh; }
+
+    .topbar{
+      display:flex;
+      align-items:center;
+      gap:1.2rem;
+      margin-bottom:1.5rem;
+      flex-wrap:wrap;
+    }
+
+    .clock{ font-size:var(--clockSize); white-space:nowrap; }
+
+    .marqueeWrap{ flex:1; min-width:260px; }
+    .marqueeWrap marquee{ width:100%; }
+    .message{ font-size:calc(var(--clockSize) * 0.55); color:#e3db00; }
+
+    .lyrics_current{ font-size:var(--currentSize); margin-bottom:2rem; }
+    .lyrics_next{ font-size:var(--nextSize); color:var(--nextColor); opacity:0.96; }
+    .lyrics_current p, .lyrics_next p{ margin:0; }
+
+    .panel{
+      display:flex;
+      align-items:center;
+      gap:.6rem;
+      padding:.6rem .8rem;
+      border:2px solid rgba(255,255,255,.25);
+      border-radius:.8rem;
+      background:rgba(0,0,0,.35);
+      flex-wrap:wrap;
+    }
+    .panel label{ font-size:1.1rem; opacity:.9; margin-right:.2rem; }
+    .panel input, .panel select{
+      font-size:1.1rem;
+      padding:.35rem .5rem;
+      border-radius:.4rem;
+      border:1px solid rgba(255,255,255,.25);
+      background:rgba(255,255,255,.06);
+      color:#fff;
+      outline:none;
+      width:14rem;
+    }
+    .panel input.small{ width:14rem; }
+    .panel input.tiny{ width:8rem; }
+
+    .btn{
+      font-size:1.1rem;
+      padding:.35rem .75rem;
+      border-radius:.5rem;
+      border:1px solid rgba(255,255,255,.35);
+      background:rgba(255,255,255,.10);
+      color:#fff;
+      cursor:pointer;
+    }
+    .btn:hover{ background:rgba(255,255,255,.18); }
+
+    .status{ font-size:1.05rem; opacity:.9; white-space:nowrap; }
+    .status.ok{ color:#62ff62; }
+    .status.bad{ color:#ff6b6b; }
+    .status.mid{ color:#ffd966; }
+
+    .sizeGroup{
+      display:flex;
+      align-items:center;
+      gap:.35rem;
+      margin-left:.4rem;
+    }
+    .sizeGroup .title{ font-size:1.05rem; opacity:.9; margin-right:.1rem; }
+    .sizeBtn{
+      width:2.2rem; height:2.2rem; line-height:2.2rem;
+      text-align:center;
+      border-radius:.5rem;
+      border:1px solid rgba(255,255,255,.35);
+      background:rgba(255,255,255,.10);
+      cursor:pointer;
+      user-select:none;
+    }
+    .sizeBtn:hover{ background:rgba(255,255,255,.18); }
+  </style>
+
+  <script>
+    let lyric_currentBlocks, lyric_nextBlocks, messageBlocks, clockBlocks;
+    let statusEl;
+
+    function callback_lyrics_current(lines){
+      lyric_currentBlocks[0].innerHTML = lyrics_text_html(lines);
+    }
+
+    function callback_lyrics_next(lines){
+      lyric_nextBlocks[0].innerHTML = lyrics_text_html(lines);
+    }
+
+    function callback_message(lines){
+      messageBlocks[0].innerHTML = message_text_html(lines);
+    }
+
+    // ✅ 24시간제
+    function callback_clock(time, locale){
+      if (isNaN(time)) {
+        clockBlocks[0].innerHTML = time;
+      } else {
+        const d = new Date(time * 1000);
+        clockBlocks[0].innerHTML = d.toLocaleTimeString(locale || "ko-KR", {
+          hour12: false,
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit"
+        });
+      }
+    }
+
+    const LS_KEYS = {
+      clockSize: "pp_clockSize",
+      currentSize: "pp_currentSize",
+      nextSize: "pp_nextSize",
+      // 연결값은 저장은 하되, 자동으로 화면에 뿌리지는 않음(개인정보 노출 방지)
+      proto: "pp_proto",
+      ip: "pp_ip",
+      port: "pp_port",
+      pwd: "pp_pwd",
+    };
+
+    function loadSetting(key, fallback){
+      const v = localStorage.getItem(key);
+      return (v === null || v === undefined || v === "") ? fallback : v;
+    }
+    function saveSetting(key, value){
+      localStorage.setItem(key, String(value));
+    }
+
+    function applySizesFromStorage(){
+      const clockSize = parseFloat(loadSetting(LS_KEYS.clockSize, "4.0")) || 4.0;
+      const currentSize = parseFloat(loadSetting(LS_KEYS.currentSize, "10.0")) || 10.0;
+      const nextSize = parseFloat(loadSetting(LS_KEYS.nextSize, "10.0")) || 10.0;
+
+      document.documentElement.style.setProperty("--clockSize", clockSize + "rem");
+      document.documentElement.style.setProperty("--currentSize", currentSize + "rem");
+      document.documentElement.style.setProperty("--nextSize", nextSize + "rem");
+    }
+
+    function bumpSize(which, delta){
+      const key = (which === "clock") ? LS_KEYS.clockSize
+                : (which === "current") ? LS_KEYS.currentSize
+                : LS_KEYS.nextSize;
+
+      let v = parseFloat(loadSetting(key, which==="clock" ? "4.0" : "10.0"));
+      if (!isFinite(v)) v = (which==="clock" ? 4.0 : 10.0);
+
+      v = Math.max(1.0, Math.min(25.0, v + delta));
+      saveSetting(key, v.toFixed(1));
+      applySizesFromStorage();
+    }
+
+    function setStatus(text, cls){
+      statusEl.classList.remove("ok","bad","mid");
+      statusEl.classList.add(cls);
+      statusEl.textContent = text;
+    }
+
+    function connectFromUI(){
+      const proto = document.getElementById("proto").value.trim();
+      const ip = document.getElementById("ip").value.trim();
+      const port = document.getElementById("port").value.trim();
+      const pwd = document.getElementById("pwd").value;
+
+      if(!ip || !port){
+        setStatus("IP/Port를 입력하세요", "bad");
+        return;
       }
 
-      body {
-        background-color: #000;
-        color: #FFF;
-        font-family: sans-serif;
-        font-weight: bold;
-        padding: 2rem;
-      }
+      // 저장은 하되, 다음에 자동 표시/자동연결은 하지 않음
+      saveSetting(LS_KEYS.proto, proto);
+      saveSetting(LS_KEYS.ip, ip);
+      saveSetting(LS_KEYS.port, port);
+      saveSetting(LS_KEYS.pwd, pwd);
 
-      .container { flex-direction: column; height: 100vh; }
-
-      /* 상단바(시계 + 메시지 + 설정/크기 컨트롤) */
-      .topbar{
-        display: flex;
-        align-items: center;
-        gap: 1.2rem;
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
-      }
-
-      .clock {
-        font-size: var(--clockSize);
-        white-space: nowrap;
-      }
-
-      .marqueeWrap{
-        flex: 1;
-        min-width: 260px;
-      }
-      .marqueeWrap marquee{
-        width: 100%;
-      }
-      .message{
-        font-size: calc(var(--clockSize) * 0.55);
-        color: #e3db00;
-      }
-
-      /* 현재/다음 영역 */
-      .lyrics_current { font-size: var(--currentSize); }
-      .lyrics_next { font-size: var(--nextSize); opacity: 0.92; }
-
-      .lyrics_current p, .lyrics_next p { margin: 0; }
-      .lyrics_current { margin-bottom: 2rem; }
-
-      /* 설정 패널 */
-      .panel{
-        display: flex;
-        align-items: center;
-        gap: .6rem;
-        padding: .6rem .8rem;
-        border: 2px solid rgba(255,255,255,.25);
-        border-radius: .8rem;
-        background: rgba(0,0,0,.35);
-      }
-      .panel label{
-        font-size: 1.1rem;
-        opacity: .9;
-        margin-right: .2rem;
-      }
-      .panel input, .panel select{
-        font-size: 1.1rem;
-        padding: .35rem .5rem;
-        border-radius: .4rem;
-        border: 1px solid rgba(255,255,255,.25);
-        background: rgba(255,255,255,.06);
-        color: #fff;
-        outline: none;
-        width: 11rem;
-      }
-      .panel input.small { width: 7rem; }
-      .panel input.tiny { width: 5.5rem; }
-
-      .btn{
-        font-size: 1.1rem;
-        padding: .35rem .75rem;
-        border-radius: .5rem;
-        border: 1px solid rgba(255,255,255,.35);
-        background: rgba(255,255,255,.10);
-        color: #fff;
-        cursor: pointer;
-      }
-      .btn:hover{ background: rgba(255,255,255,.18); }
-
-      .status{
-        font-size: 1.05rem;
-        opacity: .9;
-        white-space: nowrap;
-      }
-      .status.ok{ color: #62ff62; }
-      .status.bad{ color: #ff6b6b; }
-      .status.mid{ color: #ffd966; }
-
-      /* 크기 조절 그룹 */
-      .sizeGroup{
-        display: flex;
-        align-items: center;
-        gap: .35rem;
-        margin-left: .5rem;
-      }
-      .sizeGroup .title{
-        font-size: 1.05rem;
-        opacity: .9;
-        margin-right: .1rem;
-      }
-      .sizeBtn{
-        width: 2.2rem;
-        height: 2.2rem;
-        line-height: 2.2rem;
-        text-align: center;
-        border-radius: .5rem;
-        border: 1px solid rgba(255,255,255,.35);
-        background: rgba(255,255,255,.10);
-        cursor: pointer;
-        user-select: none;
-      }
-      .sizeBtn:hover{ background: rgba(255,255,255,.18); }
-
-      /* 모바일/좁은 폭에서 패널 줄바꿈 */
-      @media (max-width: 900px){
-        body{ padding: 1.2rem; }
-        .panel{ width: 100%; flex-wrap: wrap; }
-        .panel input{ width: 100%; }
-        .panel input.small, .panel input.tiny{ width: 100%; }
-        .sizeGroup{ margin-left: 0; }
-      }
-    </style>
-
-    <!-- config.js는 "기본값"만 유지하고, 실제 접속값은 localStorage로 오버라이드 -->
-    <script type="text/javascript" src="config.js"></script>
-    <script type="text/javascript" src="js/core.js"></script>
-
-    <script>
-      // ===== UI 요소 핸들 =====
-      let lyric_currentBlocks, lyric_nextBlocks, messageBlocks, clockBlocks;
-      let statusEl;
-
-      function callback_lyrics_current(lines) {
-        const html = lyrics_text_html(lines);
-        lyric_currentBlocks[0].innerHTML = html;
-      }
-
-      function callback_lyrics_next(lines) {
-        const html = lyrics_text_html(lines);
-        lyric_nextBlocks[0].innerHTML = html;
-      }
-
-      function callback_message(lines) {
-        const html = message_text_html(lines);
-        messageBlocks[0].innerHTML = html;
-      }
-
-      function callback_clock(time, locale) {
-        if (isNaN(time)) {
-          clockBlocks[0].innerHTML = time;
-        } else {
-          const clockObj = new Date(time * 1000);
-          clockBlocks[0].innerHTML = clockObj.toLocaleTimeString(locale);
-        }
-      }
-
-      // ===== localStorage 유틸 =====
-      const LS_KEYS = {
-        proto: "pp_proto",
-        ip: "pp_ip",
-        port: "pp_port",
-        pwd: "pp_pwd",
-        clockSize: "pp_clockSize",
-        currentSize: "pp_currentSize",
-        nextSize: "pp_nextSize",
+      window.runtimeConfigOverride = {
+        Proto: proto,
+        IPAddress: ip,
+        IPPort: parseInt(port, 10),
+        Password: pwd
       };
 
-      function loadSetting(key, fallback){
-        const v = localStorage.getItem(key);
-        return (v === null || v === undefined || v === "") ? fallback : v;
-      }
-      function saveSetting(key, value){
-        localStorage.setItem(key, String(value));
+      if(window.ProPresenter && window.ProPresenter[0] && typeof window.ProPresenter[0].disconnect === "function"){
+        window.ProPresenter[0].disconnect();
       }
 
-      // ===== 크기 적용 =====
-      function applySizesFromStorage(){
-        const clockSize = parseFloat(loadSetting(LS_KEYS.clockSize, "4.0")) || 4.0;
-        const currentSize = parseFloat(loadSetting(LS_KEYS.currentSize, "10.0")) || 10.0;
-        const nextSize = parseFloat(loadSetting(LS_KEYS.nextSize, "10.0")) || 10.0;
+      setStatus("연결 시도 중...", "mid");
 
-        document.documentElement.style.setProperty("--clockSize", clockSize + "rem");
-        document.documentElement.style.setProperty("--currentSize", currentSize + "rem");
-        document.documentElement.style.setProperty("--nextSize", nextSize + "rem");
-      }
+      window.ProPresenter = window.ProPresenter || [];
+      window.ProPresenter[0] = new Connection();
+      window.ProPresenter[0].connect();
+    }
 
-      function bumpSize(which, delta){
-        const key = (which === "clock") ? LS_KEYS.clockSize
-                  : (which === "current") ? LS_KEYS.currentSize
-                  : LS_KEYS.nextSize;
+    window.onPPConnectionState = function(state, detail){
+      if(state === "connected") setStatus("Connected", "ok");
+      else if(state === "auth_ok") setStatus("Auth OK", "ok");
+      else if(state === "auth_fail") setStatus("Auth Failed", "bad");
+      else if(state === "reconnecting") setStatus("Reconnecting...", "mid");
+      else if(state === "closed") setStatus("Closed", "mid");
+      else if(state === "error") setStatus("Error: " + (detail || ""), "bad");
+      else setStatus(state, "mid");
+    };
 
-        let v = parseFloat(loadSetting(key, which==="clock" ? "4.0" : "10.0"));
-        if (!isFinite(v)) v = (which==="clock" ? 4.0 : 10.0);
+    document.addEventListener("DOMContentLoaded", () => {
+      lyric_currentBlocks = document.getElementsByClassName("lyrics_current");
+      lyric_nextBlocks = document.getElementsByClassName("lyrics_next");
+      messageBlocks = document.getElementsByClassName("message");
+      clockBlocks = document.getElementsByClassName("clock");
+      statusEl = document.getElementById("status");
 
-        // 단위는 rem, 너무 작거나 너무 큰 것 방지
-        v = Math.max(1.0, Math.min(25.0, v + delta));
-        saveSetting(key, v.toFixed(1));
-        applySizesFromStorage();
-      }
+      applySizesFromStorage();
 
-      // ===== 연결 설정 적용/연결 =====
-      function fillInputsFromStorage(){
-        document.getElementById("proto").value = loadSetting(LS_KEYS.proto, "ws");
-        document.getElementById("ip").value = loadSetting(LS_KEYS.ip, (config && config.IPAddress) ? config.IPAddress : "");
-        document.getElementById("port").value = loadSetting(LS_KEYS.port, (config && config.IPPort) ? String(config.IPPort) : "");
-        document.getElementById("pwd").value = loadSetting(LS_KEYS.pwd, (config && config.Password) ? config.Password : "");
-      }
+      // ✅ 개인정보 노출 방지: 자동으로 내 값 채우지 않음
+      document.getElementById("proto").value = "ws";
+      document.getElementById("ip").value = "";
+      document.getElementById("port").value = "";
+      document.getElementById("pwd").value = "";
 
-      function setStatus(text, cls){
-        statusEl.classList.remove("ok","bad","mid");
-        statusEl.classList.add(cls);
-        statusEl.textContent = text;
-      }
+      setStatus("정보 입력 후 연결", "mid");
 
-      function connectFromUI(){
-        const proto = document.getElementById("proto").value.trim();
-        const ip = document.getElementById("ip").value.trim();
-        const port = document.getElementById("port").value.trim();
-        const pwd = document.getElementById("pwd").value;
+      document.getElementById("btnConnect").addEventListener("click", connectFromUI);
 
-        if(!ip || !port){
-          setStatus("IP/Port를 입력하세요", "bad");
-          return;
-        }
+      document.getElementById("clockMinus").addEventListener("click", () => bumpSize("clock", -0.2));
+      document.getElementById("clockPlus").addEventListener("click", () => bumpSize("clock", +0.2));
+      document.getElementById("curMinus").addEventListener("click", () => bumpSize("current", -0.5));
+      document.getElementById("curPlus").addEventListener("click", () => bumpSize("current", +0.5));
+      document.getElementById("nextMinus").addEventListener("click", () => bumpSize("next", -0.5));
+      document.getElementById("nextPlus").addEventListener("click", () => bumpSize("next", +0.5));
+    });
+  </script>
+</head>
 
-        saveSetting(LS_KEYS.proto, proto);
-        saveSetting(LS_KEYS.ip, ip);
-        saveSetting(LS_KEYS.port, port);
-        saveSetting(LS_KEYS.pwd, pwd);
+<body>
+  <div class="container">
+    <div class="topbar">
+      <div class="clockWrap"><span class="clock"></span></div>
 
-        // core.js가 읽을 런타임 설정(오버라이드)
-        window.runtimeConfigOverride = {
-          Proto: proto,
-          IPAddress: ip,
-          IPPort: parseInt(port, 10),
-          Password: pwd
-        };
-
-        // 기존 연결 끊고 재연결
-        if(window.ProPresenter && window.ProPresenter[0] && typeof window.ProPresenter[0].disconnect === "function"){
-          window.ProPresenter[0].disconnect();
-        }
-
-        setStatus("연결 시도 중...", "mid");
-
-        // core.js의 DOMContentLoaded가 이미 지나갔으니, 여기서 직접 connect()
-        window.ProPresenter = window.ProPresenter || [];
-        window.ProPresenter[0] = new Connection();
-        window.ProPresenter[0].connect();
-      }
-
-      // core.js에서 연결 상태 콜백 호출(우리가 추가)
-      window.onPPConnectionState = function(state, detail){
-        if(state === "connected"){
-          setStatus("Connected", "ok");
-        } else if(state === "auth_ok"){
-          setStatus("Auth OK", "ok");
-        } else if(state === "auth_fail"){
-          setStatus("Auth Failed", "bad");
-        } else if(state === "reconnecting"){
-          setStatus("Reconnecting...", "mid");
-        } else if(state === "closed"){
-          setStatus("Closed", "mid");
-        } else if(state === "error"){
-          setStatus("Error: " + (detail || ""), "bad");
-        } else {
-          setStatus(state, "mid");
-        }
-      };
-
-      document.addEventListener("DOMContentLoaded", () => {
-        lyric_currentBlocks = document.getElementsByClassName("lyrics_current");
-        lyric_nextBlocks = document.getElementsByClassName("lyrics_next");
-        messageBlocks = document.getElementsByClassName("message");
-        clockBlocks = document.getElementsByClassName("clock");
-        statusEl = document.getElementById("status");
-
-        applySizesFromStorage();
-        fillInputsFromStorage();
-
-        // 자동 연결: 저장된 IP/Port가 있으면 바로 시도
-        const autoIp = loadSetting(LS_KEYS.ip, "");
-        const autoPort = loadSetting(LS_KEYS.port, "");
-        if(autoIp && autoPort){
-          connectFromUI();
-        } else {
-          setStatus("IP/Port 입력 후 연결", "mid");
-        }
-
-        document.getElementById("btnConnect").addEventListener("click", connectFromUI);
-
-        document.getElementById("clockMinus").addEventListener("click", () => bumpSize("clock", -0.2));
-        document.getElementById("clockPlus").addEventListener("click", () => bumpSize("clock", +0.2));
-        document.getElementById("curMinus").addEventListener("click", () => bumpSize("current", -0.5));
-        document.getElementById("curPlus").addEventListener("click", () => bumpSize("current", +0.5));
-        document.getElementById("nextMinus").addEventListener("click", () => bumpSize("next", -0.5));
-        document.getElementById("nextPlus").addEventListener("click", () => bumpSize("next", +0.5));
-      });
-    </script>
-  </head>
-
-  <body>
-    <div class="container">
-      <div class="topbar">
-        <div class="clockWrap">
-          <span class="clock"></span>
-        </div>
-
-        <div class="marqueeWrap">
-          <marquee><span class="message"></span></marquee>
-        </div>
-
-        <div class="panel">
-          <label>Proto</label>
-          <select id="proto">
-            <option value="ws">ws</option>
-            <option value="wss">wss</option>
-          </select>
-
-          <label>IP</label>
-          <input id="ip" class="small" placeholder="172.30.1.46" />
-
-          <label>Port</label>
-          <input id="port" class="tiny" placeholder="50001" />
-
-          <label>PW</label>
-          <input id="pwd" class="small" type="password" placeholder="12345" />
-
-          <button id="btnConnect" class="btn">연결</button>
-
-          <span id="status" class="status mid">-</span>
-
-          <div class="sizeGroup">
-            <span class="title">시계</span>
-            <span id="clockMinus" class="sizeBtn">-</span>
-            <span id="clockPlus" class="sizeBtn">+</span>
-          </div>
-
-          <div class="sizeGroup">
-            <span class="title">현재</span>
-            <span id="curMinus" class="sizeBtn">-</span>
-            <span id="curPlus" class="sizeBtn">+</span>
-          </div>
-
-          <div class="sizeGroup">
-            <span class="title">다음</span>
-            <span id="nextMinus" class="sizeBtn">-</span>
-            <span id="nextPlus" class="sizeBtn">+</span>
-          </div>
-        </div>
+      <div class="marqueeWrap">
+        <marquee><span class="message"></span></marquee>
       </div>
 
-      <div class="lyrics_current"><!-- Lyrics go here --></div>
-      <div class="lyrics_next"><!-- Lyrics go here --></div>
+      <div class="panel">
+        <label>Proto</label>
+        <select id="proto">
+          <option value="ws">ws</option>
+          <option value="wss">wss</option>
+        </select>
+
+        <label>IP</label>
+        <input id="ip" class="small" placeholder="Your ProPresenter ip" />
+
+        <label>Port</label>
+        <input id="port" class="tiny" placeholder="port" />
+
+        <label>PW</label>
+        <input id="pwd" class="small" type="password" placeholder="password" />
+
+        <button id="btnConnect" class="btn">연결</button>
+        <span id="status" class="status mid">-</span>
+
+        <div class="sizeGroup">
+          <span class="title">시계</span>
+          <span id="clockMinus" class="sizeBtn">-</span>
+          <span id="clockPlus" class="sizeBtn">+</span>
+        </div>
+
+        <div class="sizeGroup">
+          <span class="title">현재</span>
+          <span id="curMinus" class="sizeBtn">-</span>
+          <span id="curPlus" class="sizeBtn">+</span>
+        </div>
+
+        <div class="sizeGroup">
+          <span class="title">다음</span>
+          <span id="nextMinus" class="sizeBtn">-</span>
+          <span id="nextPlus" class="sizeBtn">+</span>
+        </div>
+      </div>
     </div>
-  </body>
+
+    <div class="lyrics_current"></div>
+    <div class="lyrics_next"></div>
+  </div>
+</body>
 </html>
