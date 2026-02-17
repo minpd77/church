@@ -1,7 +1,7 @@
 var config = {
-    "IPAddress": "your PorPresenter IP",
-    "IPPort": port,
-    "Password": "password",
+  IPAddress: "172.30.1.46",
+  IPPort: 50001,
+  Password: "12345",
 
 	// These details are optional, but will be used in the case the 1st ProPresenter connection fails
     "BackupIPAddress": "127.0.0.1",
