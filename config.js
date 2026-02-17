@@ -1,7 +1,11 @@
+// config.js (public repo에 올릴 기본값은 비워두세요)
 var config = {
-  IPAddress: "172.30.1.46",
-  IPPort: 50001,
-  Password: "12345",
+  IPAddress: "",
+  IPPort: 0,
+  Password: "",
+  Proto: "ws",
+  ClockLocale: "ko-KR"
+};
 
 	// These details are optional, but will be used in the case the 1st ProPresenter connection fails
     "BackupIPAddress": "127.0.0.1",
